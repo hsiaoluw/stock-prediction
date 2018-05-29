@@ -10,9 +10,8 @@ This project can
 You can also tune other parameters, use 
 ```
 python2 stock_pred.py --help 
-```
-for more infomation. stock_pred.py is in the folder clean python
-.
+```for more infomation. stock_pred.py is in the folder clean python.
+
 How to implement?
 ====================================
 You can run stock_all_pred.ipynb with jupyter notebook or
