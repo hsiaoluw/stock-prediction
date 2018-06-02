@@ -201,7 +201,7 @@ def test_all(sess, dg, tm):
     #overall test
     all_predictions = np.zeros( (1, 1,tm.n_hot))
     all_output = np.zeros((1, 1, tm.n_hot))
-    for i in range( dg._day_data.shape[0]-dg.test_sz,dg._day_data.shape[0]-21-tm.batch_size,tm.batch_size):
+    for i in range( dg._day_data.shape[0]-dg.test_sz,dg._day_data.shape[0]-tm.batch_size,tm.batch_size):
         day_input, week_input, output_label = dg.run_all_test(i)
         feed = {tm.train_inputs_day: day_input, tm.train_inputs_week: week_input, tm.label:output_label, tm.dropout:0}
         predictions = sess.run([tm.predictions], feed_dict=feed)[0]
@@ -363,7 +363,7 @@ def main():
 	parser.add_argument('--api_key',    type=str, default='J0LLMPESJ7H0SKXQ')
 	parser.add_argument('--ticker',      type=str, default='SPX', help='the symbol of the stock')
 	parser.add_argument('--iterations'   , type=int, default=1000)
-	parser.add_argument('--test_sz' ,    type=int, default=500, help='the number of tests during training')
+	parser.add_argument('--test_sz' ,    type=int, default=700, help='the number of tests during training')
 	parser.add_argument('--bz_size' ,     type=int, default=128, help='the size of batch of each training step')       
 	parser.add_argument('--day_unroll',   type=int, default=15, help='the number of previous days to predict the movement of the stock')
 	parser.add_argument('--week_unroll',  type=int, default=12, help='the number of previous weeks to predict the movement of the stock')
