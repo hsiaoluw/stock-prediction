@@ -23,8 +23,27 @@ python2 stock_pred.py --predict_type=<type> --day=<day>
 ```
 Replace \<type\> with either 4class, binary, and \<day\> with 1,5, or 20
 
-Now only support train-mode. The trained model is stored in checkpoints folder.
+For testing, please place the data in clean_python2/test/ folder.
+Include two files, one with the day information, the other with the week information.
+The file format should be 
+```
+Date       |Mid  |Volume 
+2017-4-24  |2373 |369000000
+2017-4-25  |2386 |399520000
+......
+```
+You can see the example files in clean_python2/test/ for more detail. 
+The number of daily data samples should be at least more than one year (5*52 days), and the number of weekly data samples
+should be at leat more than one year (52 weekys).
 
+The tesing command is as followed.
+```
+python2 stock_pred.py --mode=test --day=<# days of predictions> --ch_pt=checkpoints/model_binary_1_.ckpt
+```
+'--chpt=' is the chekcing point path you stored after training.
+
+If the predict_type is 'binary',the reuslt would be <date down up>.
+If the predict_type is '4class',the result would be <date strong_down down up strong_up>.
 
 Results:
 ======================
@@ -39,9 +58,9 @@ A sample plot is below. The test_acc is larger than train_acc since we have drop
 The final test accuracy after 1000 iterations:
 ```
        		|1d  | 5d | 20d
-binary 		|0.56|0.63|0.76
-4class 		|0.31|0.4 |0.37
-4class_s        |0.61|0.58|0.67
+binary 		|0.87|0.75|0.73
+4class 		|0.72|0.58|0.51
+4class_s        |0.83|0.64|0.67
 ```
 
 Other Details:
