@@ -42,7 +42,7 @@ python2 stock_pred.py --mode=test --day=<# days of predictions> --ch_pt=checkpoi
 ```
 '--chpt=' is the chekcing point path you stored after training.
 
-If the predict_type is 'binary',the reuslt would be <br> \<date down up \>.
+If the predict_type is 'binary',the reuslt would be <br> \<date down up \>. <br>
 If the predict_type is '4class',the result would be <br> \<date strong_down down up strong_up\>.
 
 Results:
