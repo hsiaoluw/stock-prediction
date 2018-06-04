@@ -16,7 +16,7 @@ def download_preprocess_data(config):
 	url_string_week = \
 	"https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=%s&outputsize=full&apikey=%s"%(config.ticker,config.api_key)
 	
-	
+	n_day_smooth=3
 	    # Save data to this file
 	file_to_save_day  = 'stock_market_data_day-%s.csv'%config.ticker
 	file_to_save_week = 'stock_market_data_week-%s.csv'%config.ticker
@@ -34,7 +34,7 @@ def download_preprocess_data(config):
 	    # extract stock market data
 	    data_day = data_day['Time Series (Daily)']
 	    data_week = data_week['Weekly Time Series']
-	    df_day  = pd.DataFrame(columns=['Date','Mid' ,'Volume'])
+	    config.df_day = df_day = pd.DataFrame(columns=['Date','Mid' ,'Volume'])
 	    df_week = pd.DataFrame(columns=['Date','Mid' ,'Volume'])
 	    for k,v in data_day.items():
 		date = dt.datetime.strptime(k, '%Y-%m-%d')
@@ -57,21 +57,21 @@ def download_preprocess_data(config):
 	    # If the data is already there, just load it from the CSV
 	else:
 		print('File already exists. Loading data from CSV')
-		df_day = pd.read_csv(file_to_save_day)
-		df_week = pd.read_csv(file_to_save_week)
+		config.df_day =df_day= pd.read_csv(file_to_save_day)
+		config.df_week = df_week=pd.read_csv(file_to_save_week)
 
 	pre_train_data_day  =  df_day.loc[:,['Mid','Volume']].as_matrix()
 	pre_train_data_week =  df_week.loc[:,['Mid','Volume']].as_matrix()
 
 	#align pre_train_data_data with data week
-	align=0
+	config.align= align=0
 	while(df_day['Date'].loc[align] <=df_week['Date'].loc[0]):
 	    align=align+1
-
+	config.align= align
 	pre_train_data_day = pre_train_data_day[align:]
 	    
-	total_day_1y = 52*5
-	total_week_1y =52-config.week_unroll
+	config.total_day_1y = total_day_1y= 52*5-config.week_unroll*5
+	config.total_week_1y= total_week_1y =52-config.week_unroll
 
 	train_data_day  = np.zeros(( pre_train_data_day.shape[0] - total_day_1y,2))
 	train_data_week = np.zeros(( pre_train_data_week.shape[0]-total_week_1y,2))
@@ -91,59 +91,63 @@ def download_preprocess_data(config):
 	
 
 	#discard first year data for moving average
-	average_day = np.mean( pre_train_data_day[total_day_1y:], axis=0) 
-	average_week = np.mean( pre_train_data_week[total_week_1y:], axis=0) 
+	average_day = np.mean( pre_train_data_day[:total_day_1y], axis=0) 
+	average_week = np.mean( pre_train_data_week[:total_week_1y], axis=0) 
+	config.ori_data_day = np.copy(pre_train_data_day[total_day_1y:])
+	config.five_day_avg      = np.copy(pre_train_data_day)
 
-	config.five_day_avg      = pre_train_data_day
-	for i in range(6, config.five_day_avg.shape[0]):
-		config.five_day_avg[i]= config.five_day_avg[i-1]+0.2*(pre_train_data_day[i]-pre_train_data_day[i-5])
+	for i in range(5, config.five_day_avg.shape[0]):
+		config.five_day_avg[i]= (pre_train_data_day[i]-pre_train_data_day[i-5])*0.2+ config.five_day_avg[i-1]
+	config.ori_data_day[0] = (pre_train_data_day[total_day_1y]+pre_train_data_day[total_day_1y-1]+ pre_train_data_day[total_day_1y-2])/3
+	for i in range( 1, config.ori_data_day.shape[0]):
+		config.ori_data_day[i]= (pre_train_data_day[i+total_day_1y]-pre_train_data_day[i+total_day_1y-config.n_day_smooth])*(1.0/config.n_day_smooth)+ config.ori_data_day[i-1]
 		
 	config.five_day_avg_norm = np.zeros(( config.five_day_avg.shape[0]-total_day_1y ,2))
 	EMA = np.array(0)
 	average_fiveday = average_day
 	for i in range(0, train_data_day.shape[0]):
-	    average_day = average_day+ (pre_train_data_day[i+total_day_1y]- pre_train_data_day[i])/ total_day_1y
-	    train_data_day[i,0] =  (pre_train_data_day[i+total_day_1y,0]- pre_train_data_day[i-1+total_day_1y,0])/pre_train_data_day[i-1+total_day_1y,0]
-	    train_data_day[i,1:] = (pre_train_data_day[i+total_week_1y,1:]/(average_day[1:]))*0.95+  EMA*0.05
-	    #train_data_day[i] = (pre_train_data_day[i+total_day_1y]) *0.95 + EMA*0.05
-	    EMA = train_data_day[i, 1:]
+		average_day = average_day+ (pre_train_data_day[i+total_day_1y]- pre_train_data_day[i])/ total_day_1y
+		train_data_day[i,0] =  (config.ori_data_day[i,0]- config.ori_data_day[i-1,0])/config.ori_data_day[i-1,0]
+		train_data_day[i,1:] = (config.ori_data_day[i,1:]/(average_day[1:]))#*0.95+  EMA*0.05
+		EMA = train_data_day[i, 1:]
 	
 	EMA = np.array(0)
 	for i in range(0,train_data_week.shape[0]):
-	    average_week = average_week+ (pre_train_data_week[i+total_week_1y]- pre_train_data_week[i])/ total_week_1y
-	    train_data_week[i,0] =  (pre_train_data_week[i+total_week_1y,0]- pre_train_data_week[i-1+total_week_1y,0])/pre_train_data_week[i-1+total_week_1y,0]
-	    train_data_week[i,1:] = (pre_train_data_week[i+total_week_1y,1:]/(average_week[1:]))*0.95+  EMA*0.05
-	    EMA = train_data_week[i,1:]
-	
+		average_week = average_week+ (pre_train_data_week[i+total_week_1y]- pre_train_data_week[i])/ total_week_1y
+		train_data_week[i,0] =  (pre_train_data_week[i+total_week_1y,0]- pre_train_data_week[i-1+total_week_1y,0])/pre_train_data_week[i-1+total_week_1y,0]
+		train_data_week[i,1:] = (pre_train_data_week[i+total_week_1y,1:]/(average_week[1:]))#*0.95+  EMA*0.05
+		EMA = train_data_week[i,1:]
 	EMA = np.array(0)	
-	for i in range(1,config.five_day_avg_norm.shape[0]):
-	    average_fiveday = average_fiveday+ (config.five_day_avg[i+total_day_1y]- config.five_day_avg[i])/ total_day_1y
-	    config.five_day_avg_norm[i,0]  =   (config.five_day_avg[i+total_day_1y,0]- config.five_day_avg[i+total_day_1y-1*5,0])/ config.five_day_avg[i+total_day_1y-1*5,0]
-	    config.five_day_avg_norm[i,1:] =   (config.five_day_avg[i+total_day_1y,1:]/(average_fiveday[1:]))*0.95+  EMA*0.05
-	    EMA = config.five_day_avg_norm[i,1:]
+	for i in range(0,config.five_day_avg_norm.shape[0]):
+		average_fiveday = average_fiveday+ (config.five_day_avg[i+total_day_1y]- config.five_day_avg[i])/ total_day_1y
+		config.five_day_avg_norm[i,0]  =   (config.five_day_avg[i+total_day_1y,0]- config.five_day_avg[i+total_day_1y-1*5,0])/ config.five_day_avg[i+total_day_1y-1*5,0]
+		config.five_day_avg_norm[i,1:] =   (config.five_day_avg[i+total_day_1y,1:]/(average_fiveday[1:]))#*0.95+  EMA*0.05
+		EMA = config.five_day_avg_norm[i,1:]
 
 	    
-	config.max_train_day = np.amax(train_data_day, axis=0)
-	config.max_train_week = np.amax(train_data_week, axis=0)
-	config.train_data_day = train_data_day/ config.max_train_day
+	config.max_train_day =  config.train_data_max_day
+	config.max_train_week = config.train_data_max_week
+	config.train_data_day = train_data_day/ config.train_data_max_day
+	#for i in range(config.train_data_day.shape[0]):
+		#print '%s\t%f\t%f\t%f' %( config.df_day['Date'].loc[i+config.align+total_day_1y],config.train_data_day[i,0], config.ori_data_day[i,0], config.train_data_day[i,1])
 	config.train_data_week = train_data_week/ config.max_train_week
 	config.five_day_avg_norm = config.five_day_avg_norm/ config.max_train_day
-	config.ori_data_day = pre_train_data_day[total_day_1y:]
+	
 	##macd
 	config.macd= np.zeros((config.ori_data_day.shape[0], config.ori_data_day.shape[1]))
 	#config.macd_five= np.zeros((config.ori_data_day.shape[0], config.ori_data_day.shape[1]))
 	short=short_five=0
-	long=long_five=0
+	long_=long_five=0
 	for i in range(config.macd.shape[0]):
 		short = config.ori_data_day[i]*0.15+ short*0.85
-		long  = config.ori_data_day[i]*0.075+ long*0.925
+		long_  = config.ori_data_day[i]*0.075+ long_*0.925
 		#short_five = config.five_day_avg[i+total_day_1y]*0.15+ short_five*0.85
 		#long_five  = config.five_day_avg[i+total_day_1y]*0.075+ long_five*0.925
-		config.macd[i]         = (short-long)/config.ori_data_day[i]
+		config.macd[i]         = (short-long_)/config.ori_data_day[i]
 		#config.macd_five[i] = (short_five-long_five)/config.five_day_avg[i+total_day_1y]
-	#config.train_data_day = np.concatenate( [config.train_data_day, config.macd], axis=1)
+	config.train_data_day = np.concatenate( [config.train_data_day, config.macd], axis=1)
 	#config.five_day_avg_norm = np.concatenate( [config.five_day_avg_norm, config.macd_five], axis=1)
-	config.ori_data_week= pre_train_data_week[total_week_1y:]
+	config.ori_data_week= np.copy(pre_train_data_week[total_week_1y:])
 	
 ### define train one step procedure
 def train_one_step(sess,iteration, dg, tm):
@@ -171,7 +175,7 @@ def train_one_step(sess,iteration, dg, tm):
         condense_train_acc = np.mean(condense_correct)
     #print 'step:%d , cost:%f' % (iteration, step_cost)
     
-    if (iteration%10 ==1):
+    if (iteration%100 ==1):
         day_input, week_input, output_label = dg.onestep_unroll(test=True)
         feed = {tm.train_inputs_day: day_input, tm.train_inputs_week: week_input, tm.label:output_label, tm.dropout:0}
         test_cost, predictions = sess.run([tm.cost, tm.predictions], feed_dict=feed)
@@ -197,21 +201,33 @@ def train_one_step(sess,iteration, dg, tm):
     return step_cost
 
 ### define test procedure
-def test_all(sess, dg, tm):
+def test_all(sess, dg, tm, config):
     #overall test
-    all_predictions = np.zeros( (1, 1,tm.n_hot))
-    all_output = np.zeros((1, 1, tm.n_hot))
-    for i in range( dg._day_data.shape[0]-dg.test_sz,dg._day_data.shape[0]-21-tm.batch_size,tm.batch_size):
-        day_input, week_input, output_label = dg.run_all_test(i)
-        feed = {tm.train_inputs_day: day_input, tm.train_inputs_week: week_input, tm.label:output_label, tm.dropout:0}
-        predictions = sess.run([tm.predictions], feed_dict=feed)[0]
-        all_predictions=np.append(all_predictions,predictions, axis=0)
-        all_output=     np.append(all_output,output_label, axis=0)
+	all_predictions = np.zeros( (1, 1,tm.n_hot))
+	all_output = np.zeros((1, 1, tm.n_hot))
+	for i in range( dg._day_data.shape[0]-dg.test_sz,dg._day_data.shape[0]-tm.batch_size-20,tm.batch_size):
+		day_input, week_input, output_label = dg.run_all_test(i)
+		feed = {tm.train_inputs_day: day_input, tm.train_inputs_week: week_input, tm.label:output_label, tm.dropout:0}
+        	predictions = sess.run([tm.predictions_softmax], feed_dict=feed)[0]
+		acc         = np.mean( 1*np.equal( np.argmax(predictions, axis=2), np.argmax(output_label, axis=2)) )
+		print 'test from date %s to %s, with test acc=%f' % (  config.df_day['Date'].loc[config.align+i+ config.total_day_1y], config.df_day['Date'].loc[config.align+i+tm.batch_size-1+ config.total_day_1y], acc)
+		#print output_label.shape
+        	all_predictions=np.append(all_predictions,predictions, axis=0)
+        	all_output=     np.append(all_output,output_label, axis=0)
     
-    
-    all_correct = 1*np.equal( np.argmax(all_predictions, axis=2), np.argmax(all_output, axis=2)) 
-    train_acc = np.mean( all_correct)
-    print 'test overall predictions:%s' % (train_acc)
+	all_predictions = all_predictions[1:]
+	#print all_predictions.shape
+	all_output = all_output[1:]
+	
+	all_correct = 1*np.equal( np.argmax(all_predictions, axis=2), np.argmax(all_output, axis=2))
+	max_output = np.argmax(all_output, axis=2)
+	#for i in range(all_predictions.shape[0]):
+		#if config.predict_type == '4class':
+			#print '%s %f %f %f %f %d' % ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y+ dg._day_data.shape[0]-dg.test_sz],all_predictions[i,0,0], all_predictions[i,0,1], all_predictions[i,0,2], all_predictions[i,0,3], max_output[i,0])
+		#else:
+			#print '%s %f %f %d' %       ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y+ dg._day_data.shape[0]-dg.test_sz],all_predictions[i,0,0], all_predictions[i,0,1], max_output[i,0])
+	train_acc = np.mean( all_correct)
+	print 'test overall predictions:%s' % (train_acc)
 
 def train(config, dg):
 	session_config = tf.ConfigProto(
@@ -231,14 +247,12 @@ def train(config, dg):
 	saver = tf.train.Saver()
 	for i in range(config.iterations):
 	    train_one_step(sess,i,dg,tm)
-	test_all(sess, dg, tm)
+	test_all(sess, dg, tm, config)
 	saver.save(sess, "checkpoints/model_"+config.predict_type+"_"+str(int(config.output_normalize_dict[0,0]))+"_.ckpt")
 	sess.close()
 
 def test(config):
 	if get_testdata(config):
-		
-		
 		session_config = tf.ConfigProto(
 				allow_soft_placement=True,
 		        	gpu_options=tf.GPUOptions(allow_growth=True),
@@ -254,18 +268,39 @@ def test(config):
 		saver = tf.train.Saver()
 		saver.restore(sess, config.ch_pt)
 		
-		
-		for i in range(config.week_unroll*5+1, config.test_data_day.shape[0]):
-			test_data_day, test_data_week=test_onestep(config,i)
+		all_predictions = np.zeros( (1, 1,tm.n_hot))
+		all_output = np.zeros((1, 1, 1))
+		ori =1.0
+		nd = config.output_normalize_dict[0,0]
+		ns = 1#config.n_day_smooth
+		for i in range(config.week_unroll*5+1, config.test_data_day.shape[0]-20):
+			test_data_day, test_data_week, test_output=test_onestep(config,i)
 			feed = {tm.train_inputs_day: test_data_day, tm.train_inputs_week: test_data_week, tm.dropout:0}
-			
-			
 			predictions = sess.run([tm.predictions_softmax], feed_dict=feed)[0]
+			all_predictions = np.append(all_predictions, predictions, axis=0)
+			all_output = np.append(all_output, test_output, axis=0)
+			real_trend = ((config.df_day['Mid'].loc[config.align+i+nd+ config.total_day_1y]-config.df_day['Mid'].loc[config.align+i+ config.total_day_1y])/config.df_day['Mid'].loc[config.align+i+ config.total_day_1y])
+			print real_trend, ori
 			if predictions.shape[2] ==2: 
-				print '%s %f %f' % ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y], predictions[0,0,0], predictions[0,0,1])
+				print '%s\t%f\t%f\t%d' % ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y], predictions[0,0,0], predictions[0,0,1], test_output[0,0,0])
+				if predictions[0,0,1]>0.55: #and (config.df_day['Mid'].loc[config.align+i+config.total_day_1y]< config.df_day['Mid'].loc[config.align+i-1+ config.total_day_1y]):
+					ori= ori*(1+real_trend)
+				elif predictions[0,0,0]>0.55:  #and (config.df_day['Mid'].loc[config.align+i+config.total_day_1y]> config.df_day['Mid'].loc[config.align+i-1+ config.total_day_1y]) :
+					ori= ori*(1-real_trend)
 			else:
-				print '%s %f %f %f %f' % ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y], predictions[0,0,0], predictions[0,0,1], predictions[0,0,2], predictions[0,0,3])
-			
+				print '%s\t%f\t%f\t%f\t%f\t%d' % ( config.df_day['Date'].loc[config.align+i+ config.total_day_1y], predictions[0,0,0], predictions[0,0,1], predictions[0,0,2], predictions[0,0,3], test_output[0,0,0])
+				if (predictions[0,0,2]+predictions[0,0,3]>0.55) :
+					ori= ori*(1+real_trend)
+				elif predictions[0,0,1]+predictions[0,0,2]>0.55 :
+					ori= ori*(1-real_trend)
+		all_predictions = all_predictions[1:]
+		all_output = all_output[1:]
+		#print all_output.shape, all_predictions.shape
+		expand = np.expand_dims( np.argmax( all_predictions, axis=2), axis=1)
+		#print expand.shape
+		acc= np.mean( 1*np.equal(expand ,all_output) )
+		
+		print 'test acc:%f, look_back earning:%f' % (acc, ori)	
 
 def get_testdata(config):
 	test_day = config.testroot+('stock_market_data_day-%s.csv'%config.ticker)
@@ -283,25 +318,30 @@ def get_testdata(config):
 	while(config.df_day['Date'].loc[config.align] <=config.df_week['Date'].loc[0]):
 	    config.align=config.align+1
 	pre_test_data_day = pre_test_data_day[config.align:]
+
 	config.test_data_day  = np.zeros(( pre_test_data_day.shape[0]- total_day_1y ,2))
 	config.day_week_map    = np.zeros(( pre_test_data_day.shape[0]-total_day_1y )) #map day to corresponing week data
 	config.test_data_week = np.zeros(( pre_test_data_week.shape[0]-total_week_1y,2))
 	
-	average_day = np.mean( pre_test_data_day[:total_day_1y], axis=0) 
+	average_day  = np.mean( pre_test_data_day[:total_day_1y], axis=0) 
 	average_week = np.mean( pre_test_data_week[:total_week_1y], axis=0) 
 	average_fiveday = average_day
 	
-	config.five_day_avg      = pre_test_data_day
-	for i in range(6, config.five_day_avg.shape[0]):
+	config.five_day_avg      = np.copy(pre_test_data_day)
+	for i in range(5, config.five_day_avg.shape[0]):
 		config.five_day_avg[i]= config.five_day_avg[i-1]+0.2*(pre_test_data_day[i]-pre_test_data_day[i-5])
 		
 	config.five_day_avg_norm = np.zeros(( config.five_day_avg.shape[0]-total_day_1y ,2))
+	config.ori_data_day = np.copy( pre_test_data_day[total_day_1y:])
 	
+	config.ori_data_day[0] = (pre_test_data_day[total_day_1y]+pre_test_data_day[total_day_1y-1]+ pre_test_data_day[total_day_1y-2])/3
+	for i in range( 1, config.ori_data_day.shape[0]):
+		config.ori_data_day[i]= (pre_test_data_day[i+total_day_1y]-pre_test_data_day[i-config.n_day_smooth+total_day_1y])*(1.0/config.n_day_smooth)+ config.ori_data_day[i-1]
 	j=0
 	for i in range(0, config.test_data_day.shape[0]): 
 		if j>= config.test_data_week.shape[0]:
 			config.day_week_map[i]=j
-			print i, j
+			#print i, j
 		else:
 			while ( config.df_day['Date'].loc[i+config.align] >config.df_week['Date'].loc[j]):
 				j= j+1
@@ -313,35 +353,41 @@ def get_testdata(config):
 				config.day_week_map[i] =j-1
 				#print i, j-1
 
-
-	for i in range(0, config.test_data_day.shape[0]):
+	EMA = np.array(0)
+	for i in range(1, config.test_data_day.shape[0]):
 		average_day = average_day+ (pre_test_data_day[i+total_day_1y]- pre_test_data_day[i])/ total_day_1y
-		config.test_data_day[i,0] =  (pre_test_data_day[i+total_day_1y,0]- pre_test_data_day[i-1+total_day_1y,0])/(pre_test_data_day[i-1+total_day_1y,0]*config.train_data_max_day[0])
-		config.test_data_day[i,1:] = (pre_test_data_day[i+total_day_1y,1:]/(config.train_data_max_day[1:]*average_day[1:]))
-	
+		config.test_data_day[i,0] =  (config.ori_data_day[i,0]- config.ori_data_day[i-1,0])/(config.ori_data_day[i-1,0])
+		config.test_data_day[i,1:] = (config.ori_data_day[i,1:]/(average_day[1:]))#*0.95+ 0.05*EMA
+		EMA = config.test_data_day[i, 1:]
+	EMA = np.array(0)
 	for i in range(0, config.test_data_week.shape[0]):
 		average_week = average_week+ (pre_test_data_week[i+total_week_1y]- pre_test_data_week[i])/ total_week_1y
-		config.test_data_week[i,0] =  (pre_test_data_week[i+total_week_1y,0]- pre_test_data_week[i-1+total_week_1y,0])/(pre_test_data_week[i-1+total_week_1y,0]*config.train_data_max_week[0])
-		config.test_data_week[i,1:] = (pre_test_data_week[i+total_week_1y,1:]/(config.train_data_max_week[1:]*average_week[1:]))
-	
+		config.test_data_week[i,0] =  (pre_test_data_week[i+total_week_1y,0]- pre_test_data_week[i-1+total_week_1y,0])/(pre_test_data_week[i-1+total_week_1y,0])
+		config.test_data_week[i,1:] = (pre_test_data_week[i+total_week_1y,1:]/(average_week[1:]))#*0.95+ 0.05*EMA
+		EMA = config.test_data_week[i, 1:]
+		
+	EMA = np.array(0)
 	for i in range(0,config.five_day_avg_norm.shape[0]):
 		average_fiveday = average_fiveday+ (config.five_day_avg[(i+total_day_1y)]- config.five_day_avg[i])/ total_day_1y
-		config.five_day_avg_norm[i,0]  =   (config.five_day_avg[i+total_day_1y,0]- config.five_day_avg[i+total_day_1y-1*5,0])/(config.five_day_avg[i+total_day_1y-1*5,0]*config.train_data_max_day[0])
-		config.five_day_avg_norm[i,1:] =   (config.five_day_avg[i+total_day_1y,1:]/(config.train_data_max_day[1:]*average_fiveday[1:]))
+		config.five_day_avg_norm[i,0]  =   (config.five_day_avg[i+total_day_1y,0]- config.five_day_avg[i+total_day_1y-1*5,0])/(config.five_day_avg[i+total_day_1y-1*5,0])
+		config.five_day_avg_norm[i,1:] =   (config.five_day_avg[i+total_day_1y,1:]/(average_fiveday[1:]))#*0.95+ 0.05*EMA
+		EMA = config.five_day_avg_norm[i, 1:]
 	config.macd= np.zeros((config.test_data_day.shape[0], config.test_data_day.shape[1]))
-	#config.macd_five= np.zeros((config.ori_data_day.shape[0], config.ori_data_day.shape[1]))
-	short=short_five=long= long_five=0
+	
+	config.test_data_day= config.test_data_day/ config.train_data_max_day
+	#for i in range(config.test_data_day.shape[0]):
+		#print '%s\t%f\t%f\t%f' %( config.df_day['Date'].loc[i+config.align+total_day_1y],config.test_data_day[i,0],  config.test_data_day[i,1],config.ori_data_day[i,0])
+	config.test_data_week= config.test_data_week/ config.train_data_max_week
+	config.five_day_avg_norm= config.five_day_avg_norm/ config.train_data_max_day
+	short= 0
+	long_= 0
 	for i in range(config.macd.shape[0]):
 		short = pre_test_data_day[i+total_day_1y]*0.15+ short*0.85
-		long  = pre_test_data_day[i+total_day_1y]*0.075+ long*0.925
-		#short_five = config.five_day_avg[i+total_day_1y]*0.15+ short_five*0.85
-		#long_five  = config.five_day_avg[i+total_day_1y]*0.075+ long_five*0.925
-		config.macd[i] = (short-long)/pre_test_data_day[i+total_day_1y]
-		#config.macd_five[i] = (short_five-long_five)/config.five_day_avg[i+total_day_1y]
-	#config.test_data_day = np.concatenate( [config.test_data_day, config.macd], axis=1)
-	#config.five_day_avg_norm = np.concatenate( [config.five_day_avg_norm, config.macd_five], axis=1)
+		long_  = pre_test_data_day[i+total_day_1y]*0.075+ long_*0.925
+		config.macd[i] = (short-long_)/pre_test_data_day[i+total_day_1y]
+	config.test_data_day = np.concatenate( [config.test_data_day, config.macd], axis=1)
 	
-	#print config.test_data_day.shape[0], config.test_data_week.shape[0], config.day_week_map[-1]
+	#print config.test_data_week.shape
 	if ( config.test_data_day.shape[0]>=config.day_unroll+1 and config.test_data_week.shape[0]>=config.week_unroll+1 and  config.day_week_map[-1]>=config.week_unroll): return True
 	else: return False
 	
@@ -350,30 +396,49 @@ def test_onestep(config, index):
         for i in range(config.day_unroll, 0, -1):
 			one_test_day.append(config.test_data_day[index-i+1]) 
         for i in range(config.week_unroll,0, -1):
-			one_test_week.append(config.five_day_avg_norm[index-(i-1)*5])
+			if not config.output_normalize_dict[0,0]==1:
+				week_data = config.test_data_week[int(config.day_week_map[index]-i)]
+			else:
+				week_data = config.five_day_avg_norm[int(index)-(i-1)*5]
+			one_test_week.append(week_data)
+			 
+	result =  (config.ori_data_day[int(index+config.output_normalize_dict[0,0]),0]-config.ori_data_day[index,0])/config.ori_data_day[index,0]
+
+	batch_labels  = np.zeros(   (1,int(config.output_normalize_dict.shape[0]),1) , dtype=np.float32)
+	if config.predict_type=='binary': batch_labels[0,0,0]=(1 if result>=0 else 0)   
+	if config.predict_type=='4class':
+		if  (result>config.output_normalize_dict[0,1]):     
+			batch_labels[0,0,0]=3
+		elif(result>0):                               
+			batch_labels[0,0,0]=2
+		elif(result<-1*config.output_normalize_dict[0,1]):  
+			batch_labels[0,0,0]=0
+		else:  
+			batch_labels[0,0,0]=1
 	
 	one_test_day  =  np.expand_dims( np.array(one_test_day),axis=0)
 	one_test_week =  np.expand_dims( np.array(one_test_week),axis=0)
 	
-	return one_test_day, one_test_week
+	return one_test_day, one_test_week, batch_labels
 
 def main():
 	import argparse
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--api_key',    type=str, default='J0LLMPESJ7H0SKXQ')
 	parser.add_argument('--ticker',      type=str, default='SPX', help='the symbol of the stock')
-	parser.add_argument('--iterations'   , type=int, default=1000)
-	parser.add_argument('--test_sz' ,    type=int, default=700, help='the number of tests during training')
-	parser.add_argument('--bz_size' ,     type=int, default=128, help='the size of batch of each training step')       
-	parser.add_argument('--day_unroll',   type=int, default=15, help='the number of previous days to predict the movement of the stock')
+	parser.add_argument('--iterations'   , type=int, default=2000)
+	parser.add_argument('--test_sz' ,    type=int, default=533, help='the number of tests during training')
+	parser.add_argument('--bz_size' ,     type=int, default=128, help='the size of batch of each training step')
+	parser.add_argument('--n_day_smooth', type=int, default=5, help='to smooth the curve of daily price')       
+	parser.add_argument('--day_unroll',   type=int, default=20, help='the number of previous days to predict the movement of the stock')
 	parser.add_argument('--week_unroll',  type=int, default=12, help='the number of previous weeks to predict the movement of the stock')
 	parser.add_argument('--predict_type', type=str, default='binary', choices=['binary', '4class'])	
 	parser.add_argument('--day',          type=int, default=1, choices=[1, 5, 20], ) #1day, 1week, 1m	
 	parser.add_argument('--mode',         type=str, default='train', choices=['train', 'test'])
 	parser.add_argument('--ch_pt',        type=str, default='checkpoints/', help='the path of trained model for testing')
 	parser.add_argument('--testroot',     type=str, default='test/', help='the path of test data for testing')
-	parser.add_argument('--train_data_max_day', default=[0.081, 1.619])
-	parser.add_argument('--train_data_max_week', default=[0.085, 1.46])
+	parser.add_argument('--train_data_max_day', default=[0.0081, 1.619])
+	parser.add_argument('--train_data_max_week', default=[0.0085, 1.46])
 	                           
 	config = parser.parse_args()
 	config.train_data_max_day = np.array(config.train_data_max_day)

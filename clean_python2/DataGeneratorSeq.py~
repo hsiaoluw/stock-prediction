@@ -32,7 +32,7 @@ class DataGeneratorSeq(object):
 		self.five_day_avg_norm = five_day_avg_norm
 
 	def _get_labels(self, test= False):
-		day_data = self.ori_data_day if self._output_norm_dict[0,0]==1 else self.five_day_avg
+		day_data = self.ori_data_day #i self._output_norm_dict[0,0]==1 else self.five_day_avg
 		week_data = self.ori_data_week
 		cursor = self._test_cursor if(test) else self._cursor
 		
@@ -44,12 +44,12 @@ class DataGeneratorSeq(object):
 		for b in range(self._batch_size):    
 		    for j in range(0,self._output_norm_dict.shape[0]):
 		        if not j==0:
-		            result=  \
-		            (week_data[ int(self._day_week_map[int(cursor[b])]+self._output_norm_dict[j,0]),0]\
-		            -week_data[ int(self._day_week_map[int(cursor[b])]),0])/week_data[ int(self._day_week_map[int(cursor[b])]),0]
+				result=  \
+		                (week_data[ int(self._day_week_map[int(cursor[b])]+self._output_norm_dict[j,0]),0]\
+		                -week_data[ int(self._day_week_map[int(cursor[b])]),0])/week_data[ int(self._day_week_map[int(cursor[b])]),0]
 		        else:
-		            result =  (day_data[int(cursor[b]+self._output_norm_dict[0,0]),0]- 
-		                                          day_data[int(cursor[b]),0])/day_data[int(cursor[b]),0]
+				result =  (day_data[int(cursor[b]+self._output_norm_dict[0,0]),0]- 
+		                           day_data[int(cursor[b]),0])/day_data[int(cursor[b]),0]
 		        if self.predict_type=='binary': batch_labels[b,0,:]=(np.array([0,1]) if result>=0 else np.array([1,0]))   
 		        if self.predict_type=='4class':
 		            batch_labels[b,j]  = np.zeros((4), dtype=np.float32)
@@ -74,16 +74,14 @@ class DataGeneratorSeq(object):
 		cursor = self._test_cursor if(test) else self._cursor
 		week_batch_data = np.zeros((self._batch_size, self.five_day_avg_norm.shape[1]),dtype=np.float32)
 		for b in range(self._batch_size):
-			week_batch_data[b] = self._week_data[int(self._day_week_map[int(cursor[b])]-i)] if self._output_norm_dict[0,0]==1 else self.five_day_avg_norm[int(cursor[b])-(i-1)*5]
-			#week_batch_data[b] = self.five_day_avg_norm[int(cursor[b])-(i-1)*5]
+			week_batch_data[b] = np.copy(self._week_data[int(self._day_week_map[int(cursor[b])]-i)] if not (self._output_norm_dict[0,0]==1)else self.five_day_avg_norm[int(cursor[b])-(i-1)*5])
 		return week_batch_data
 
 	def _get_onestep_daybatch(self,i, test=False):
 		cursor = self._test_cursor if(test) else self._cursor
 		day_batch_data = np.zeros((self._batch_size, self._day_data.shape[1]),dtype=np.float32)
 		for b in range(self._batch_size):
-		    k=int(cursor[b]-i)
-		    day_batch_data[b] = self._day_data[k]
+			day_batch_data[b] = np.copy(self._day_data[int(cursor[b]-i)])
 		return day_batch_data
    
 
@@ -91,13 +89,13 @@ class DataGeneratorSeq(object):
 
 		unroll_weekdata,unroll_daydata = [],[]
 		for i in range(self._num_day_unroll):
-		    unroll_daydata.append(self._get_onestep_daybatch(self._num_day_unroll-1-i, test))
+		    unroll_daydata.append(self._get_onestep_daybatch(self._num_day_unroll-1-i, test=test))
 		for i in range(self._num_week_unroll):
-		    unroll_weekdata.append(self._get_onestep_weekbatch(self._num_week_unroll-i, test))
+		    unroll_weekdata.append(self._get_onestep_weekbatch(self._num_week_unroll-i, test=test))
 
-		onestep_label=self._get_labels(test)
+		onestep_label=self._get_labels(test=test)
 		#update label
-		self.reset_indices(test)
+		self.reset_indices(test=test)
 		unroll_daydata  = np.transpose( unroll_daydata,  (1, 0, 2))
 		unroll_weekdata = np.transpose( unroll_weekdata, (1, 0, 2))
 		return unroll_daydata, unroll_weekdata, onestep_label
@@ -114,5 +112,5 @@ class DataGeneratorSeq(object):
 	def run_all_test(self, i,test=True):
 		# i the start of tests
 		self._test_cursor = np.arange(i, i+self._batch_size)
-		a,b,c = self.onestep_unroll(test=True)
-		return a, b, c
+		return  self.onestep_unroll(test=True)
+		

@@ -58,9 +58,9 @@ A sample plot is below. The test_acc is larger than train_acc since we have drop
 The final test accuracy after 1000 iterations:
 ```
        		|1d  | 5d | 20d
-binary 		|0.87|0.75|0.73
-4class 		|0.72|0.58|0.51
-4class_s        |0.83|0.64|0.67
+binary 		|0.75|0.53|0.55
+4class 		|0.61|0.37|0.50
+4class_s        |0.74|0.42|0.51
 ```
 
 Other Details:
